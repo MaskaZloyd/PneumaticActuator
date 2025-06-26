@@ -1,5 +1,15 @@
 {
     "dependencies": [
-        "eigen3"
+        "eigen3",
+        "glfw3",
+        "glad",
+        {
+            "name": "imgui",
+            "features": [
+                "docking-experimental",
+                "opengl3-binding",
+                "glfw-binding"
+            ]
+        }
     ]
 }
