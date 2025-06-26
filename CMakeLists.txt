@@ -21,6 +21,7 @@ find_package(imgui CONFIG REQUIRED)
 add_executable(${PROJECT_NAME} 
 src/main.cpp
 src/platform/window_manager.cpp
+src/core/application.cpp
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE glfw glad::glad imgui::imgui)

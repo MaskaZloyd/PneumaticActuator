@@ -1,20 +1,18 @@
 #include <print>
 
-#include "platform/window_manager.hpp"
+#include "core/application.hpp"
 
 int
 main()
 {
   try {
-    auto& window_manager{ mz::platform::createWindowManager(
-      "PneumaticActuator - GLFW + GLAD + ImGui", 1200, 800) };
+    auto& app = mz::core::createApplication(
+      "PneumaticActuator - GLFW + GLAD + ImGui", 1200, 800);
 
-    std::println("Window manager created, window id: {}",
-                 window_manager.getWindowId());
+    std::println("Application created, window id: {}",
+                 app.getWindowManager().getWindowId());
 
-    while (!window_manager.shouldClose()) {
-      window_manager.beginFrame();
-
+    app.setFrameCallback([]() {
       static bool show_demo_window = true;
       if (show_demo_window) {
         ImGui::ShowDemoWindow(&show_demo_window);
@@ -37,22 +35,25 @@ main()
       ImGui::SameLine();
       ImGui::Text("counter = %d", counter);
 
+      auto& window_manager =
+        mz::core::Application::getInstance().getWindowManager();
       auto [fb_width, fb_height]   = window_manager.getFramebufferSize();
       auto [win_width, win_height] = window_manager.getWindowSize();
       ImGui::Text("Window size: %dx%d", win_width, win_height);
       ImGui::Text("Framebuffer size: %dx%d", fb_width, fb_height);
 
       if (ImGui::Button("Close Application")) {
-        window_manager.setShouldClose(true);
+        mz::core::Application::getInstance().shutdown();
       }
 
       ImGui::End();
+    });
 
-      window_manager.endFrame();
-    }
+    app.setShutdownCallback([]() {
+      std::println("Application shutting down - cleanup callback called");
+    });
 
-    std::println("Application shutting down gracefully");
-    return 0;
+    return app.run();
 
   } catch (const mz::platform::WindowManagerException& e) {
     std::println(stderr, "WindowManager error: {}", e.what());
