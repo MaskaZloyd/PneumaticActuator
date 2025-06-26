@@ -1,0 +1,46 @@
+{
+    "version": 4,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "default-msvc",
+            "displayName": "Default (MSVC + vcpkg)",
+            "generator": "Ninja",
+            "description": "Configure using MSVC and vcpkg integration.",
+            "hidden": false,
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/.vcpkg/scripts/buildsystems/vcpkg.cmake",
+                "CMAKE_CXX_STANDARD": "23"
+            }
+        },
+        {
+            "name": "clang-vcpkg",
+            "displayName": "Clang (LLVM) + vcpkg",
+            "generator": "Ninja",
+            "description": "Configure using Clang/LLVM and vcpkg integration.",
+            "hidden": false,
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "C:/Program Files/LLVM/bin/clang.exe",
+                "CMAKE_CXX_COMPILER": "C:/Program Files/LLVM/bin/clang++.exe",
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/.vcpkg/scripts/buildsystems/vcpkg.cmake",
+                "CMAKE_CXX_STANDARD": "23"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "default-msvc",
+            "configurePreset": "default-msvc"
+        },
+        {
+            "name": "clang-vcpkg",
+            "configurePreset": "clang-vcpkg"
+        }
+    ]
+}
