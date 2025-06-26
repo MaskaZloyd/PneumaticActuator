@@ -1,6 +1,6 @@
-.vscode
-
-build
-
+.vscode/
 .vcpkg/
 vcpkg_installed/
+
+build/
+
