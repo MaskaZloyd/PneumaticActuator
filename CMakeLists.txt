@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 4.0 FATAL_ERROR)
 project(PneumaticActuator LANGUAGES CXX)
 
@@ -17,12 +16,16 @@ find_package(Eigen3 CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
+# find_package(spdlog CONFIG REQUIRED)
 
 add_executable(${PROJECT_NAME} 
 src/main.cpp
 src/platform/window_manager.cpp
 src/core/application.cpp
+src/core/logger.cpp
+src/gui/pneumatic_parameters_module.cpp
+src/core/util/solver.cpp
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE glfw glad::glad imgui::imgui)
+target_link_libraries(${PROJECT_NAME} PRIVATE glfw glad::glad imgui::imgui Eigen3::Eigen)
 target_include_directories(${PROJECT_NAME} PRIVATE src)

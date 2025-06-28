@@ -1,4 +1,5 @@
 #include "window_manager.hpp"
+#include "core/logger.hpp"
 
 #include <format>
 #include <limits>
@@ -9,7 +10,8 @@ namespace {
 void
 glfw_error_callback(int error, const char* description)
 {
-  std::println(stderr, "GLFW Error {}: {}", error, description);
+
+  MZ_LOG_ERROR("GLFW Error");
 }
 
 void
@@ -147,8 +149,8 @@ WindowManager::init_glfw(const std::string_view title,
 
   glfwSetFramebufferSizeCallback(m_window.get(), framebuffer_size_callback);
 
-  std::println(
-    "GLFW initialized successfully. Window created: {}x{}", width, height);
+  MZ_LOG_INFO(std::format(
+    "GLFW initialized successfully. Window created: {}x{}", width, height));
 }
 
 void
@@ -163,12 +165,14 @@ WindowManager::init_glad()
   const auto* version      = glGetString(GL_VERSION);
   const auto* glsl_version = glGetString(GL_SHADING_LANGUAGE_VERSION);
 
-  std::println("OpenGL initialized successfully:");
-  std::println("  Vendor: {}", reinterpret_cast<const char*>(vendor));
-  std::println("  Renderer: {}", reinterpret_cast<const char*>(renderer));
-  std::println("  Version: {}", reinterpret_cast<const char*>(version));
-  std::println("  GLSL Version: {}",
-               reinterpret_cast<const char*>(glsl_version));
+  MZ_LOG_INFO("OpenGL initialized successfully");
+  MZ_LOG_INFO(std::format("Vendor: {}", reinterpret_cast<const char*>(vendor)));
+  MZ_LOG_INFO(
+    std::format("Renderer: {}", reinterpret_cast<const char*>(renderer)));
+  MZ_LOG_INFO(
+    std::format("Version: {}", reinterpret_cast<const char*>(version)));
+  MZ_LOG_INFO(std::format("GLSL Version: {}",
+                          reinterpret_cast<const char*>(glsl_version)));
 
   glEnable(GL_DEPTH_TEST);
 
@@ -191,7 +195,7 @@ WindowManager::init_imgui()
   io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
   io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
-  ImGui::StyleColorsDark();
+  ImGui::StyleColorsLight();
 
   ImGuiStyle& style = ImGui::GetStyle();
   if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
@@ -210,7 +214,7 @@ WindowManager::init_imgui()
   }
 
   m_imgui_initialized = true;
-  std::println("ImGui initialized successfully with docking and viewports");
+  MZ_LOG_INFO("ImGui initialized successfully");
 }
 
 void
@@ -240,7 +244,8 @@ WindowManager::WindowManager(const std::string_view title,
     init_glad();
     init_imgui();
 
-    std::println("WindowManager created successfully with ID: {}", m_window_id);
+    MZ_LOG_INFO(std::format(
+      "WindowManager initialized successfully with ID: {}", m_window_id));
   } catch (const WindowManagerException& e) {
     cleanup();
     throw;
