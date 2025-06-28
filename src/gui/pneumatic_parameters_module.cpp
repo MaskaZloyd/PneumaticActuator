@@ -1,42 +1,280 @@
 #include "pneumatic_parameters_module.hpp"
 #include "core/logger.hpp"
 
+#include <format>
 #include <imgui.h>
 #include <string>
+#include <thread>
 #include <vector>
+
+mz::gui::PneumaticParametersModule::PneumaticParametersModule(
+  std::shared_ptr<model::PneumaticModel> pneumatic_model)
+  : m_pneumatic_parameters{}
+  , m_pneumatic_model(pneumatic_model)
+  , m_solver_config{}
+  , m_initial_state{ (Eigen::VectorXd(2) << 0.0, 0.0).finished() }
+  , m_t_span{ 0.0, 1.0 }
+  , m_step_size_ui{ 0.001f }
+  , m_initial_position_ui{ 0.0f }
+  , m_initial_velocity_ui{ 0.0f }
+  , m_t_start_ui{ 0.0f }
+  , m_t_end_ui{ 1.0f }
+  , m_is_calculating{ false }
+{
+  initializeUIFromConfig();
+}
 
 void
 mz::gui::PneumaticParametersModule::render()
 {
   ImGui::Begin("Pneumatic Parameters");
 
-  ImGui::SameLine();
-  if (ImGui::Button("Start", ImVec2(100, 20))) {
-    MZ_LOG_INFO("Start");
+  // Control buttons
+  if (m_is_calculating) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.4f, 0.4f, 1.0f));
+    if (ImGui::Button("Calculating...", ImVec2(120, 30))) {
+      // Could add stop functionality here
+    }
+    ImGui::PopStyleColor();
+  } else {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.8f, 0.4f, 1.0f));
+    if (ImGui::Button("Start Calculation", ImVec2(120, 30))) {
+      updateSolverConfigFromUI();
+      updateInitialStateFromUI();
+      updateTSpanFromUI();
+
+      m_pneumatic_model->setParameters(m_pneumatic_parameters);
+      m_pneumatic_model->setSolverConfig(m_solver_config);
+      m_pneumatic_model->setInitialState(m_initial_state);
+      m_pneumatic_model->setTspan(m_t_span);
+
+      MZ_LOG_INFO(std::format(
+        "Starting pneumatic actuator calculation with parameters: "
+        "Piston Ø={:.1f}mm, Rod Ø={:.1f}mm, Pin={:.1f}bar, Pout={:.1f}bar, "
+        "Mass={:.1f}kg, Stroke={:.1f}mm, Step={:.4f}s, Time=[{:.2f}, {:.2f}]s",
+        m_pneumatic_parameters.piston_diameter,
+        m_pneumatic_parameters.rod_diameter,
+        m_pneumatic_parameters.in_pressure,
+        m_pneumatic_parameters.out_pressure,
+        m_pneumatic_parameters.mass,
+        m_pneumatic_parameters.stroke,
+        m_solver_config.step_size,
+        m_t_span.first,
+        m_t_span.second));
+
+      m_is_calculating = true;
+      std::thread([this]() {
+        m_pneumatic_model->startCalculation();
+        m_is_calculating = false;
+      }).detach();
+    }
+    ImGui::PopStyleColor();
   }
 
   ImGui::SameLine();
-  if (ImGui::Button("Stop", ImVec2(100, 20))) {
-    MZ_LOG_INFO("Stop");
+  if (ImGui::Button("Reset Parameters", ImVec2(120, 30))) {
+    m_pneumatic_parameters = {};
+    m_solver_config        = {};
+    m_initial_state        = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
+    m_t_span               = { 0.0, 1.0 };
+    initializeUIFromConfig();
+    MZ_LOG_INFO("Parameters reset to defaults");
   }
 
   ImGui::Separator();
-  if (ImGui::CollapsingHeader("Cylinder parameter")) {
-    ImGui::DragFloat(
-      "Piston Diameter", &m_piston_diameter, 0.1f, 0.0f, 100.0f, "%.3f, mm");
-    ImGui::DragFloat(
-      "Rod Diameter", &m_rod_diameter, 0.1f, 0.0f, 100.0f, "%.3f, mm");
+
+  // Cylinder Parameters
+  if (ImGui::CollapsingHeader("Cylinder Parameters",
+                              ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::PushItemWidth(200);
+
+    ImGui::DragFloat("Piston Diameter##piston",
+                     &m_pneumatic_parameters.piston_diameter,
+                     0.1f,
+                     1.0f,
+                     200.0f,
+                     "%.1f mm");
+    ImGui::SameLine();
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Internal diameter of the cylinder piston");
+    }
+
+    ImGui::DragFloat("Rod Diameter##rod",
+                     &m_pneumatic_parameters.rod_diameter,
+                     0.1f,
+                     1.0f,
+                     100.0f,
+                     "%.1f mm");
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Diameter of the piston rod");
+    }
+
+    ImGui::DragFloat("Stroke Length##stroke",
+                     &m_pneumatic_parameters.stroke,
+                     1.0f,
+                     10.0f,
+                     1000.0f,
+                     "%.1f mm");
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Maximum travel distance of the piston");
+    }
+
+    ImGui::PopItemWidth();
   }
-  if (ImGui::CollapsingHeader("Gas parameter")) {
+
+  // Gas Parameters
+  if (ImGui::CollapsingHeader("Gas Parameters",
+                              ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::PushItemWidth(200);
+
+    ImGui::DragFloat("Inlet Pressure##pin",
+                     &m_pneumatic_parameters.in_pressure,
+                     0.1f,
+                     0.1f,
+                     20.0f,
+                     "%.1f bar");
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Supply pressure to the cylinder");
+    }
+
+    ImGui::DragFloat("Outlet Pressure##pout",
+                     &m_pneumatic_parameters.out_pressure,
+                     0.1f,
+                     0.0f,
+                     10.0f,
+                     "%.1f bar");
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Exhaust pressure from the cylinder");
+    }
+
+    ImGui::PopItemWidth();
+  }
+
+  // Load Parameters
+  if (ImGui::CollapsingHeader("Load Parameters",
+                              ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::PushItemWidth(200);
+
+    ImGui::DragFloat("Load Mass##mass",
+                     &m_pneumatic_parameters.mass,
+                     0.1f,
+                     0.1f,
+                     100.0f,
+                     "%.1f kg");
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Mass of the load being moved by the actuator");
+    }
+
+    ImGui::PopItemWidth();
+  }
+
+  // Initial Conditions
+  if (ImGui::CollapsingHeader("Initial Conditions",
+                              ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::PushItemWidth(200);
+
+    ImGui::DragFloat("Initial Position##init_pos",
+                     &m_initial_position_ui,
+                     0.001f,
+                     -1.0f,
+                     1.0f,
+                     "%.3f m");
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Starting position of the piston");
+    }
+
+    ImGui::DragFloat("Initial Velocity##init_vel",
+                     &m_initial_velocity_ui,
+                     0.001f,
+                     -5.0f,
+                     5.0f,
+                     "%.3f m/s");
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Starting velocity of the piston");
+    }
+
+    ImGui::PopItemWidth();
+  }
+
+  // Time Parameters
+  if (ImGui::CollapsingHeader("Time Parameters",
+                              ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::PushItemWidth(200);
+
     ImGui::DragFloat(
-      "Inlet Pressure", &m_in_pressure, 0.1f, 0.0f, 100.0f, "%.3f, bar");
+      "Start Time##t_start", &m_t_start_ui, 0.01f, 0.0f, 10.0f, "%.2f s");
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Simulation start time");
+    }
+
     ImGui::DragFloat(
-      "Outlet Pressure", &m_out_pressure, 0.1f, 0.0f, 100.0f, "%.3f, bar");
-    ImGui::DragFloat(
-      "Inlet Temperature", &m_in_temperature, 0.1f, 0.0f, 100.0f, "%.3f, C");
-    ImGui::DragFloat(
-      "Outlet Temperature", &m_out_temperature, 0.1f, 0.0f, 100.0f, "%.3f, C");
+      "End Time##t_end", &m_t_end_ui, 0.01f, 0.1f, 100.0f, "%.2f s");
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Simulation end time");
+    }
+
+    // Ensure t_end > t_start
+    if (m_t_end_ui <= m_t_start_ui) {
+      m_t_end_ui = m_t_start_ui + 0.1f;
+    }
+
+    ImGui::PopItemWidth();
+  }
+
+  // Solver Parameters
+  if (ImGui::CollapsingHeader("Solver Parameters")) {
+    ImGui::PushItemWidth(200);
+
+    ImGui::DragFloat("Step Size##step_size",
+                     &m_step_size_ui,
+                     0.0001f,
+                     0.0001f,
+                     0.1f,
+                     "%.4f s");
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip(
+        "Numerical integration step size (smaller = more accurate but slower)");
+    }
+
+    int max_steps = static_cast<int>(m_solver_config.max_steps);
+    ImGui::DragInt("Max Steps##max_steps", &max_steps, 100, 1000, 100000, "%d");
+    m_solver_config.max_steps = static_cast<std::size_t>(max_steps);
+    if (ImGui::IsItemHovered()) {
+      ImGui::SetTooltip("Maximum number of integration steps");
+    }
+
+    ImGui::PopItemWidth();
   }
 
   ImGui::End();
+}
+
+void
+mz::gui::PneumaticParametersModule::updateSolverConfigFromUI()
+{
+  m_solver_config.step_size = static_cast<double>(m_step_size_ui);
+}
+
+void
+mz::gui::PneumaticParametersModule::updateInitialStateFromUI()
+{
+  m_initial_state(0) = static_cast<double>(m_initial_position_ui);
+  m_initial_state(1) = static_cast<double>(m_initial_velocity_ui);
+}
+
+void
+mz::gui::PneumaticParametersModule::updateTSpanFromUI()
+{
+  m_t_span.first  = static_cast<double>(m_t_start_ui);
+  m_t_span.second = static_cast<double>(m_t_end_ui);
+}
+
+void
+mz::gui::PneumaticParametersModule::initializeUIFromConfig()
+{
+  m_step_size_ui        = static_cast<float>(m_solver_config.step_size);
+  m_initial_position_ui = static_cast<float>(m_initial_state(0));
+  m_initial_velocity_ui = static_cast<float>(m_initial_state(1));
+  m_t_start_ui          = static_cast<float>(m_t_span.first);
+  m_t_end_ui            = static_cast<float>(m_t_span.second);
 }
