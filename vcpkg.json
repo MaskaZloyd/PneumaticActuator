@@ -3,6 +3,7 @@
         "eigen3",
         "glfw3",
         "glad",
+        "spdlog",
         {
             "name": "imgui",
             "features": [
@@ -10,6 +11,7 @@
                 "opengl3-binding",
                 "glfw-binding"
             ]
-        }
+        },
+        "implot"
     ]
 }

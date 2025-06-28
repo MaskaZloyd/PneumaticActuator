@@ -188,6 +188,10 @@ WindowManager::init_imgui()
 {
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
+
+  // Initialize ImPlot context
+  ImPlot::CreateContext();
+
   ImGuiIO& io = ImGui::GetIO();
 
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -214,7 +218,7 @@ WindowManager::init_imgui()
   }
 
   m_imgui_initialized = true;
-  MZ_LOG_INFO("ImGui initialized successfully");
+  MZ_LOG_INFO("ImGui and ImPlot initialized successfully");
 }
 
 void
@@ -223,7 +227,11 @@ WindowManager::cleanup()
   if (m_imgui_initialized) {
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
+
+    // Cleanup ImPlot context
+    ImPlot::DestroyContext();
     ImGui::DestroyContext();
+
     m_imgui_initialized = false;
   }
 
