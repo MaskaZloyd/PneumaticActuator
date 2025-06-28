@@ -18,7 +18,7 @@ namespace mz::core::util {
 enum class SolverType : uint16_t
 {
   ImplicitEuler = 0,
-  ExplicitEuler = 1 /
+  ExplicitEuler = 1
 };
 
 /**
@@ -93,6 +93,18 @@ public:
   }
 
   /**
+   * @brief Get the solver configuration
+   * @return The solver configuration
+   */
+  [[nodiscard]] SolverConfig getConfig() const { return config_; }
+
+  /**
+   * @brief Set the solver configuration
+   * @param config The solver configuration
+   */
+  void setConfig(const SolverConfig& config) { config_ = config; }
+
+  /**
    * @brief Solve ODE system with implicit method requiring Jacobian
    *
    * Solves the initial value problem dy/dt = f(t, y) with y(t0) = y0
@@ -107,10 +119,10 @@ public:
    */
   template<OdeFunction F, JacobianFunction J>
     requires(Method == SolverType::ImplicitEuler)
-  auto solve(F&&                              ode_func,
-             J&&                              jacobian_func,
-             const std::pair<double, double>& t_span,
-             const Eigen::VectorXd&           y0) -> SolveResult
+  [[nodiscard]] SolveResult solve(F&& ode_func,
+                                  J&& jacobian_func,
+                                  const std::pair<double, double>& t_span,
+                                  const Eigen::VectorXd&           y0)
   {
     return solve_implicit_euler(
       std::forward<F>(ode_func), std::forward<J>(jacobian_func), t_span, y0);
@@ -130,9 +142,9 @@ public:
    */
   template<OdeFunction F>
     requires(Method == SolverType::ExplicitEuler)
-  auto solve(F&&                              ode_func,
-             const std::pair<double, double>& t_span,
-             const Eigen::VectorXd&           y0) -> SolveResult
+  [[nodiscard]] SolveResult solve(F&&                              ode_func,
+                                  const std::pair<double, double>& t_span,
+                                  const Eigen::VectorXd&           y0)
   {
     return solve_explicit_euler(std::forward<F>(ode_func), t_span, y0);
   }
