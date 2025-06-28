@@ -1,4 +1,5 @@
 #include "application.hpp"
+#include "core/logger.hpp"
 
 #include <iostream>
 #include <stdexcept>
@@ -16,7 +17,7 @@ Application::Application(std::string_view title,
 
     m_window_manager = &platform::createWindowManager(title, width, height);
 
-    std::cout << "Application initialized successfully: " << title << std::endl;
+    MZ_LOG_INFO("Application initialized successfully");
 
   } catch (const std::exception& e) {
     cleanup();
@@ -38,7 +39,7 @@ int
 Application::run()
 {
   if (!m_window_manager) {
-    std::cerr << "Error: WindowManager not initialized" << std::endl;
+    MZ_LOG_ERROR("Error: WindowManager not initialized");
     return -1;
   }
 
@@ -46,7 +47,7 @@ Application::run()
     m_running            = true;
     m_shutdown_requested = false;
 
-    std::cout << "Starting application event loop..." << std::endl;
+    MZ_LOG_INFO("Starting application event loop...");
 
     while (m_running && !m_window_manager->shouldClose() &&
            !m_shutdown_requested) {
@@ -57,22 +58,20 @@ Application::run()
       try {
         m_shutdown_callback();
       } catch (const std::exception& e) {
-        std::cerr << "Exception in shutdown callback: " << e.what()
-                  << std::endl;
+        MZ_LOG_ERROR("Exception in shutdown callback");
       }
     }
 
-    std::cout << "Application shutting down gracefully" << std::endl;
+    MZ_LOG_INFO("Application shutting down gracefully");
     m_running = false;
 
     return 0;
 
   } catch (const platform::WindowManagerException& e) {
-    std::cerr << "WindowManager error: " << e.what() << std::endl;
+    MZ_LOG_ERROR("WindowManager error");
     return -1;
   } catch (const std::exception& e) {
-    std::cerr << "Unexpected error in application loop: " << e.what()
-              << std::endl;
+    MZ_LOG_ERROR("Unexpected error in application loop");
     return -1;
   }
 }
@@ -81,7 +80,7 @@ void
 Application::shutdown() noexcept
 {
   m_shutdown_requested = true;
-  std::cout << "Application shutdown requested" << std::endl;
+  MZ_LOG_INFO("Application shutdown requested");
 }
 
 bool
@@ -124,6 +123,12 @@ Application::setTitle(std::string_view title) noexcept
 }
 
 void
+Application::addModule(const BaseModulePtr& module) noexcept
+{
+  m_modules.push_back(std::move(module));
+}
+
+void
 Application::initialize()
 {
   std::cout << "Initializing Application..." << std::endl;
@@ -138,12 +143,8 @@ Application::processFrame()
 
   m_window_manager->beginFrame();
 
-  if (m_frame_callback) {
-    try {
-      m_frame_callback();
-    } catch (const std::exception& e) {
-      std::cerr << "Exception in frame callback: " << e.what() << std::endl;
-    }
+  for (const auto& module : m_modules) {
+    module->render();
   }
 
   m_window_manager->endFrame();
@@ -153,7 +154,7 @@ void
 Application::cleanup() noexcept
 {
   try {
-    std::cout << "Cleaning up Application resources..." << std::endl;
+    MZ_LOG_INFO("Cleaning up Application resources...");
 
     m_running           = false;
     m_window_manager    = nullptr;
@@ -161,10 +162,10 @@ Application::cleanup() noexcept
     m_frame_callback    = nullptr;
     m_shutdown_callback = nullptr;
 
-    std::cout << "Application cleanup completed" << std::endl;
+    MZ_LOG_INFO("Application cleanup completed");
 
   } catch (const std::exception& e) {
-    std::cerr << "Exception during cleanup: " << e.what() << std::endl;
+    MZ_LOG_ERROR("Exception during cleanup");
   }
 }
 

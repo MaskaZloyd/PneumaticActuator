@@ -4,7 +4,9 @@
 #include <functional>
 #include <memory>
 #include <string_view>
+#include <vector>
 
+#include "../gui/base_module.hpp"
 #include "../platform/window_manager.hpp"
 
 namespace mz::core {
@@ -20,6 +22,7 @@ class Application final
 public:
   using FrameCallback    = std::function<void()>;
   using ShutdownCallback = std::function<void()>;
+  using BaseModulePtr    = std::shared_ptr<gui::BaseModule>;
 
   /**
    * @brief Get the singleton application instance
@@ -90,6 +93,12 @@ public:
    */
   void setTitle(std::string_view title) noexcept;
 
+  /**
+   * @brief Add a module to the application
+   * @param module Module to add
+   */
+  void addModule(const BaseModulePtr& module) noexcept;
+
 private:
   /**
    * @brief Private constructor for singleton pattern
@@ -114,10 +123,11 @@ private:
   void cleanup() noexcept;
 
   // Core application state
-  platform::WindowManager* m_window_manager{ nullptr };
-  std::string              m_title;
-  bool                     m_running{ false };
-  bool                     m_shutdown_requested{ false };
+  bool                       m_running{ false };
+  bool                       m_shutdown_requested{ false };
+  std::string                m_title{};
+  platform::WindowManager*   m_window_manager{ nullptr };
+  std::vector<BaseModulePtr> m_modules;
 
   // Callbacks
   FrameCallback    m_frame_callback;
