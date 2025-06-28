@@ -16,6 +16,7 @@ find_package(Eigen3 CONFIG REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glad CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
+find_package(implot CONFIG REQUIRED)
 # find_package(spdlog CONFIG REQUIRED)
 
 add_executable(${PROJECT_NAME} 
@@ -24,8 +25,10 @@ src/platform/window_manager.cpp
 src/core/application.cpp
 src/core/logger.cpp
 src/gui/pneumatic_parameters_module.cpp
-src/core/util/solver.cpp
+src/gui/chart_module.cpp
+src/gui/statistics_module.cpp
+src/model/pneumatic_model.cpp
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE glfw glad::glad imgui::imgui Eigen3::Eigen)
+target_link_libraries(${PROJECT_NAME} PRIVATE glfw glad::glad imgui::imgui implot::implot Eigen3::Eigen)
 target_include_directories(${PROJECT_NAME} PRIVATE src)
