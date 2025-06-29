@@ -10,6 +10,8 @@
 mz::gui::PneumaticParametersModule::PneumaticParametersModule(
   std::shared_ptr<model::PneumaticModel> pneumatic_model)
   : m_pneumatic_parameters{}
+  , m_friction_parameters{}
+  , m_stop_force_parameters{}
   , m_pneumatic_model(pneumatic_model)
   , m_solver_config{}
   , m_initial_state{ (Eigen::VectorXd(2) << 0.0, 0.0).finished() }
@@ -21,7 +23,7 @@ mz::gui::PneumaticParametersModule::PneumaticParametersModule(
   , m_t_end_ui{ 1.0f }
   , m_is_calculating{ false }
 {
-  initializeUIFromConfig();
+  initialize_ui_from_config();
 }
 
 void
@@ -39,9 +41,9 @@ mz::gui::PneumaticParametersModule::render()
   } else {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.4f, 0.8f, 0.4f, 1.0f));
     if (ImGui::Button("Start Calculation", ImVec2(120, 30))) {
-      updateSolverConfigFromUI();
-      updateInitialStateFromUI();
-      updateTSpanFromUI();
+      update_solver_config_from_ui();
+      update_initial_state_from_ui();
+      update_t_span_from_ui();
 
       m_pneumatic_model->setParameters(m_pneumatic_parameters);
       m_pneumatic_model->setSolverConfig(m_solver_config);
@@ -77,7 +79,7 @@ mz::gui::PneumaticParametersModule::render()
     m_solver_config        = {};
     m_initial_state        = (Eigen::VectorXd(2) << 0.0, 0.0).finished();
     m_t_span               = { 0.0, 1.0 };
-    initializeUIFromConfig();
+    initialize_ui_from_config();
     MZ_LOG_INFO("Parameters reset to defaults");
   }
 
@@ -236,13 +238,6 @@ mz::gui::PneumaticParametersModule::render()
         "Numerical integration step size (smaller = more accurate but slower)");
     }
 
-    int max_steps = static_cast<int>(m_solver_config.max_steps);
-    ImGui::DragInt("Max Steps##max_steps", &max_steps, 100, 1000, 100000, "%d");
-    m_solver_config.max_steps = static_cast<std::size_t>(max_steps);
-    if (ImGui::IsItemHovered()) {
-      ImGui::SetTooltip("Maximum number of integration steps");
-    }
-
     ImGui::PopItemWidth();
   }
 
@@ -250,27 +245,27 @@ mz::gui::PneumaticParametersModule::render()
 }
 
 void
-mz::gui::PneumaticParametersModule::updateSolverConfigFromUI()
+mz::gui::PneumaticParametersModule::update_solver_config_from_ui()
 {
   m_solver_config.step_size = static_cast<double>(m_step_size_ui);
 }
 
 void
-mz::gui::PneumaticParametersModule::updateInitialStateFromUI()
+mz::gui::PneumaticParametersModule::update_initial_state_from_ui()
 {
   m_initial_state(0) = static_cast<double>(m_initial_position_ui);
   m_initial_state(1) = static_cast<double>(m_initial_velocity_ui);
 }
 
 void
-mz::gui::PneumaticParametersModule::updateTSpanFromUI()
+mz::gui::PneumaticParametersModule::update_t_span_from_ui()
 {
   m_t_span.first  = static_cast<double>(m_t_start_ui);
   m_t_span.second = static_cast<double>(m_t_end_ui);
 }
 
 void
-mz::gui::PneumaticParametersModule::initializeUIFromConfig()
+mz::gui::PneumaticParametersModule::initialize_ui_from_config()
 {
   m_step_size_ui        = static_cast<float>(m_solver_config.step_size);
   m_initial_position_ui = static_cast<float>(m_initial_state(0));

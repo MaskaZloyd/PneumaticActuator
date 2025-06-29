@@ -18,7 +18,10 @@ namespace mz::core::util {
 enum class SolverType : uint16_t
 {
   ImplicitEuler = 0,
-  ExplicitEuler = 1
+  ExplicitEuler = 1,
+  RungeKutta4   = 2,
+  RungeKutta5   = 3,
+
 };
 
 /**
@@ -45,7 +48,6 @@ struct SolverConfig
   double      step_size             = 0.001;
   double      newton_tolerance      = 1e-8;
   std::size_t max_newton_iterations = 50;
-  std::size_t max_steps             = 10000;
 };
 
 /**
@@ -184,8 +186,7 @@ private:
     Eigen::VectorXd y_current = y0;
     double          t_current = t_start;
 
-    for (std::size_t step = 0; step < n_steps && step < config_.max_steps;
-         ++step) {
+    for (std::size_t step = 0; step < n_steps; ++step) {
       const double t_next = t_current + h;
 
       // Newton iteration for implicit Euler step
@@ -240,8 +241,7 @@ private:
     Eigen::VectorXd y_current = y0;
     double          t_current = t_start;
 
-    for (std::size_t step = 0; step < n_steps && step < config_.max_steps;
-         ++step) {
+    for (std::size_t step = 0; step < n_steps; ++step) {
       const double          t_next = t_current + h;
       const Eigen::VectorXd y_next =
         y_current + h * ode_func(t_current, y_current);

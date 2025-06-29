@@ -12,7 +12,6 @@ namespace mz::gui {
 ChartModule::ChartModule(std::shared_ptr<model::PneumaticModel> pneumatic_model)
   : m_pneumatic_model(pneumatic_model)
 {
-  // Reserve space for typical data sizes to avoid frequent reallocations
   m_time_data.reserve(10000);
   m_position_data.reserve(10000);
   m_velocity_data.reserve(10000);
@@ -31,42 +30,43 @@ ChartModule::render()
     return;
   }
 
-  // Check if we need to update plot data
-  std::size_t current_hash = calculateResultHash();
+  std::size_t current_hash = calculate_result_hash();
+
   if (current_hash != m_last_result_hash) {
-    updatePlotData();
+    MZ_LOG_DEBUG(std::format(
+      "Current hash: {}, Last hash: {}", current_hash, m_last_result_hash));
+    update_plot_data();
     m_last_result_hash = current_hash;
   }
 
-  if (!hasValidData()) {
+  if (!has_valid_data()) {
     ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.5f, 1.0f),
                        "Invalid or empty simulation data");
     ImGui::End();
     return;
   }
 
-  // Render plot controls
-  renderPlotControls();
+  render_plot_controls();
 
   ImGui::Separator();
 
-  // Create a layout with plots
-  const float plot_height = (ImGui::GetContentRegionAvail().y - 20) / 3.0f;
-
-  // Position vs Time plot
-  renderPositionTimeChart();
-
-  // Velocity vs Time plot
-  renderVelocityTimeChart();
-
-  // Phase Portrait (Velocity vs Position)
-  renderPhasePortraitChart();
+  ImGui::BeginTabBar("Plots");
+  if (ImGui::BeginTabItem("Time Plots")) {
+    render_position_time_chart();
+    render_velocity_time_chart();
+    ImGui::EndTabItem();
+  }
+  if (ImGui::BeginTabItem("Phase Portrait")) {
+    render_phase_portrait_chart();
+    ImGui::EndTabItem();
+  }
+  ImGui::EndTabBar();
 
   ImGui::End();
 }
 
 void
-ChartModule::updatePlotData()
+ChartModule::update_plot_data()
 {
   try {
     auto result = m_pneumatic_model->getCalculationResult();
@@ -76,12 +76,10 @@ ChartModule::updatePlotData()
       return;
     }
 
-    // Clear previous data
     m_time_data.clear();
     m_position_data.clear();
     m_velocity_data.clear();
 
-    // Copy data for plotting
     m_time_data = result.time;
     m_position_data.reserve(result.state.size());
     m_velocity_data.reserve(result.state.size());
@@ -100,7 +98,7 @@ ChartModule::updatePlotData()
 }
 
 void
-ChartModule::renderPositionTimeChart()
+ChartModule::render_position_time_chart()
 {
   if (ImPlot::BeginPlot("Position vs Time", ImVec2(-1, 0))) {
 
@@ -108,11 +106,6 @@ ChartModule::renderPositionTimeChart()
                       "Position [m]",
                       ImPlotAxisFlags_AutoFit,
                       ImPlotAxisFlags_AutoFit);
-
-    if (m_show_grid) {
-      ImPlot::SetupAxisTicks(ImAxis_X1, nullptr, 0);
-      ImPlot::SetupAxisTicks(ImAxis_Y1, nullptr, 0);
-    }
 
     ImPlot::SetupLegend(ImPlotLocation_NorthEast,
                         m_show_legend ? 0 : ImPlotLegendFlags_NoButtons);
@@ -133,19 +126,14 @@ ChartModule::renderPositionTimeChart()
 }
 
 void
-ChartModule::renderVelocityTimeChart()
+ChartModule::render_velocity_time_chart()
 {
-  if (ImPlot::BeginPlot("Velocity vs Time", ImVec2(-1, 0))) {
+  if (ImPlot::BeginPlot("Velocity vs Time", ImVec2(-1, -1))) {
 
     ImPlot::SetupAxes("Time [s]",
                       "Velocity [m/s]",
                       ImPlotAxisFlags_AutoFit,
                       ImPlotAxisFlags_AutoFit);
-
-    if (m_show_grid) {
-      ImPlot::SetupAxisTicks(ImAxis_X1, nullptr, 0);
-      ImPlot::SetupAxisTicks(ImAxis_Y1, nullptr, 0);
-    }
 
     ImPlot::SetupLegend(ImPlotLocation_NorthEast,
                         m_show_legend ? 0 : ImPlotLegendFlags_NoButtons);
@@ -166,20 +154,15 @@ ChartModule::renderVelocityTimeChart()
 }
 
 void
-ChartModule::renderPhasePortraitChart()
+ChartModule::render_phase_portrait_chart()
 {
   if (ImPlot::BeginPlot("Phase Portrait (Velocity vs Position)",
-                        ImVec2(-1, 0))) {
+                        ImVec2(-1, -1))) {
 
     ImPlot::SetupAxes("Position [m]",
                       "Velocity [m/s]",
                       ImPlotAxisFlags_AutoFit,
                       ImPlotAxisFlags_AutoFit);
-
-    if (m_show_grid) {
-      ImPlot::SetupAxisTicks(ImAxis_X1, nullptr, 0);
-      ImPlot::SetupAxisTicks(ImAxis_Y1, nullptr, 0);
-    }
 
     ImPlot::SetupLegend(ImPlotLocation_NorthEast,
                         m_show_legend ? 0 : ImPlotLegendFlags_NoButtons);
@@ -192,7 +175,6 @@ ChartModule::renderPhasePortraitChart()
                      m_velocity_data.data(),
                      static_cast<int>(m_position_data.size()));
 
-    // Mark start and end points
     if (!m_position_data.empty()) {
       ImPlot::PushStyleColor(ImPlotCol_MarkerOutline,
                              ImVec4(0.0f, 1.0f, 0.0f, 1.0f));
@@ -229,7 +211,7 @@ ChartModule::renderPhasePortraitChart()
 }
 
 void
-ChartModule::renderPlotControls()
+ChartModule::render_plot_controls()
 {
   ImGui::Text("Plot Controls:");
 
@@ -244,12 +226,12 @@ ChartModule::renderPlotControls()
 
   ImGui::SameLine();
   if (ImGui::Button("Refresh")) {
-    m_last_result_hash = 0; // Force refresh
+    m_last_result_hash = 0;
   }
 }
 
 std::size_t
-ChartModule::calculateResultHash() const
+ChartModule::calculate_result_hash() const
 {
   if (!m_pneumatic_model->hasResults()) {
     return 0;
@@ -279,7 +261,7 @@ ChartModule::calculateResultHash() const
 }
 
 bool
-ChartModule::hasValidData() const noexcept
+ChartModule::has_valid_data() const noexcept
 {
   return !m_time_data.empty() && !m_position_data.empty() &&
          !m_velocity_data.empty() &&
