@@ -3,4 +3,5 @@
 vcpkg_installed/
 
 build/
+other_model/
 
