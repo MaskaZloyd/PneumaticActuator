@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Eigen/Dense>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -9,181 +10,377 @@
 #include <thread>
 #include <vector>
 
-#include "core/util/solver.hpp"
+#include "friction/lugre_friction.hpp"
+#include "physics/pneumatic_physics.hpp"
+#include "solver/ode_solver_wrapper.hpp"
+#include "stop/stop_force.hpp"
 
 namespace mz::model {
 
 /**
- * @brief Parameters for the pneumatic actuator.
+ * @brief Complete simulation configuration combining all subsystem parameters
  */
-struct PneumaticParameters
+struct SimulationConfig
 {
-  float piston_diameter{ 32.0 }; ///< Piston diameter in mm
-  float rod_diameter{ 11.0 };    ///< Rod diameter in mm
-  float in_pressure{ 6.0 };      ///< Input pressure in bar
-  float out_pressure{ 1.0 };     ///< Output pressure in bar
-  float stroke{ 300.0 };         ///< Stroke length in mm
-  float mass{ 6.0 };             ///< Mass in kg
+  physics::ThermodynamicParameters thermo{};   ///< Air properties and constants
+  physics::GeometryParameters      geometry{}; ///< Cylinder dimensions and mass
+  physics::FluidParameters
+    fluid{}; ///< Supply/exhaust pressures and valve characteristics
+  friction::LuGreParameters friction{}; ///< Friction model parameters
+  stop::StopForceParameters stop{};     ///< Stop force model parameters
+  solver::SolverConfig      solver{};   ///< ODE solver settings
+
+  /**
+   * @brief Validate all parameters for physical consistency
+   * @return true if configuration is valid
+   */
+  [[nodiscard]] bool isValid() const noexcept;
+
+  /**
+   * @brief Get configuration summary as string
+   * @return Human-readable description
+   */
+  [[nodiscard]] std::string toString() const;
 };
 
 /**
- * @brief Parameters for friction modeling.
+ * @brief Initial conditions for simulation start
  */
-struct FrictionParameters
+struct InitialConditions
 {
-  float Fc{ 100.0 }; ///< Coulomb friction force
-  float Fs{ 100.0 }; ///< Static friction force
-  float vs{ 0.01 };  ///< Stribeck velocity
-  float B{ 100.0 };  ///< Viscous friction coefficient
+  double position{ 0.0 };        ///< Initial piston position [m]
+  double velocity{ 0.0 };        ///< Initial piston velocity [m/s]
+  double pressure1{ 1e5 };       ///< Initial pressure in chamber 1 [Pa]
+  double pressure2{ 1e5 };       ///< Initial pressure in chamber 2 [Pa]
+  double temperature1{ 293.15 }; ///< Initial temperature in chamber 1 [K]
+  double temperature2{ 293.15 }; ///< Initial temperature in chamber 2 [K]
+
+  /**
+   * @brief Validate initial conditions
+   * @return true if conditions are physically reasonable
+   */
+  [[nodiscard]] bool isValid() const noexcept;
 };
 
 /**
- * @brief Parameters for stop force modeling.
+ * @brief Comprehensive simulation results with full state information
  */
-struct StopForceParameters
+struct SimulationResult
 {
-  float x_min{ 0.0 };   ///< Minimum position in mm
-  float x_max{ 300.0 }; ///< Maximum position in mm
-  float k_stop{ 1e6 };  ///< Stop spring constant in N/m
-  float c_stop{ 1e3 };  ///< Stop damping coefficient in Ns/m
+  // Time series data
+  std::vector<double> time_points; ///< Time values [s]
+  std::vector<physics::StateVector>
+    states; ///< Complete 10-component state history
+
+  // Derived time series (computed from states for convenience)
+  std::vector<double> positions;     ///< Piston positions [m]
+  std::vector<double> velocities;    ///< Piston velocities [m/s]
+  std::vector<double> pressures1;    ///< Chamber 1 pressures [Pa]
+  std::vector<double> pressures2;    ///< Chamber 2 pressures [Pa]
+  std::vector<double> temperatures1; ///< Chamber 1 temperatures [K]
+  std::vector<double> temperatures2; ///< Chamber 2 temperatures [K]
+  std::vector<double> masses1;       ///< Chamber 1 air masses [kg]
+  std::vector<double> masses2;       ///< Chamber 2 air masses [kg]
+  std::vector<std::array<double, 4>>
+    valve_openings; ///< Valve opening states [0-1]
+
+  // Performance metrics
+  std::size_t integration_steps{ 0 }; ///< Number of integration steps taken
+  std::chrono::milliseconds solve_time{ 0 }; ///< Wall clock time for solution
+  bool converged{ false }; ///< Whether integration completed successfully
+  std::string solver_name; ///< Name of solver used
+
+  /**
+   * @brief Check if result contains valid data
+   * @return true if result is valid and complete
+   */
+  [[nodiscard]] bool isValid() const noexcept;
+
+  /**
+   * @brief Get final state values
+   * @return Final state vector (empty if invalid)
+   */
+  [[nodiscard]] physics::StateVector getFinalState() const noexcept;
+
+  /**
+   * @brief Extract position and velocity trajectory for basic plotting
+   * @return Pair of (positions, velocities) vectors
+   */
+  [[nodiscard]] std::pair<std::vector<double>, std::vector<double>>
+  getBasicTrajectory() const noexcept;
 };
 
 /**
- * @brief Statistics about the calculation process and results.
+ * @brief Comprehensive statistics about simulation results
  */
-struct CalculationStatistics
+struct SimulationStatistics
 {
-  std::chrono::milliseconds calculation_time{
-    0
-  }; ///< Time taken for calculation
-  std::size_t steps_taken{ 0 };
-  bool        converged{ false };
-  double      max_position{ 0.0 };
-  double      max_velocity{ 0.0 };
-  double      final_position{ 0.0 };
-  double      final_velocity{ 0.0 };
+  // Basic motion statistics
+  double max_position{ 0.0 };     ///< Maximum absolute position [m]
+  double max_velocity{ 0.0 };     ///< Maximum absolute velocity [m/s]
+  double max_acceleration{ 0.0 }; ///< Maximum absolute acceleration [m/s²]
+  double final_position{ 0.0 };   ///< Final position [m]
+  double final_velocity{ 0.0 };   ///< Final velocity [m/s]
+
+  // Thermodynamic statistics
+  double max_pressure1{ 0.0 };    ///< Maximum chamber 1 pressure [Pa]
+  double max_pressure2{ 0.0 };    ///< Maximum chamber 2 pressure [Pa]
+  double max_temperature1{ 0.0 }; ///< Maximum chamber 1 temperature [K]
+  double max_temperature2{ 0.0 }; ///< Maximum chamber 2 temperature [K]
+  double total_mass_flow{ 0.0 };  ///< Total mass flow through system [kg]
+
+  // Performance statistics
+  std::chrono::milliseconds calculation_time{ 0 };    ///< Total simulation time
+  std::size_t               steps_taken{ 0 };         ///< Integration steps
+  bool                      converged{ false };       ///< Convergence status
+  double                    average_step_size{ 0.0 }; ///< Average step size [s]
+
+  /**
+   * @brief Get statistics summary as string
+   * @return Human-readable summary
+   */
+  [[nodiscard]] std::string toString() const;
 };
 
 /**
- * @brief Pneumatic actuator model for simulation and analysis.
+ * @brief Simple valve controller that can be configured from GUI parameters
  *
- * This class encapsulates the parameters, state, and solver configuration for
- * simulating a pneumatic actuator, including friction and stop force effects.
+ * Provides basic control strategies:
+ * - Constant valve openings
+ * - Step input at specified time
+ * - Simple pressure regulation
+ */
+class ConfigurableValveController final : public physics::IValveController
+{
+public:
+  enum class ControlMode
+  {
+    ConstantOpening,   ///< Fixed valve openings
+    StepInput,         ///< Step change at specified time
+    PressureRegulation ///< Simple pressure-based control
+  };
+
+  /**
+   * @brief Construct controller with constant openings
+   * @param openings Fixed valve openings [u1, u2, u3, u4]
+   */
+  explicit ConfigurableValveController(
+    std::array<double, 4> openings = { 0.5, 0.0, 0.0, 0.5 });
+
+  /**
+   * @brief Configure step input control
+   * @param step_time Time to apply step [s]
+   * @param before_openings Valve openings before step
+   * @param after_openings Valve openings after step
+   */
+  void configureStepInput(double                step_time,
+                          std::array<double, 4> before_openings,
+                          std::array<double, 4> after_openings);
+
+  /**
+   * @brief Configure pressure regulation control
+   * @param target_pressure1 Target pressure for chamber 1 [Pa]
+   * @param target_pressure2 Target pressure for chamber 2 [Pa]
+   * @param gain Control gain
+   */
+  void configurePressureRegulation(double target_pressure1,
+                                   double target_pressure2,
+                                   double gain = 0.1);
+
+  // IValveController interface
+  [[nodiscard]] std::array<double, 4> getValveCommands(
+    double                      time,
+    const physics::StateVector& state) const override;
+
+  void reset() override;
+
+private:
+  ControlMode           m_mode{ ControlMode::ConstantOpening };
+  std::array<double, 4> m_constant_openings{};
+
+  // Step input parameters
+  double                m_step_time{ 0.0 };
+  std::array<double, 4> m_before_openings{};
+  std::array<double, 4> m_after_openings{};
+
+  // Pressure regulation parameters
+  double m_target_pressure1{ 1e5 };
+  double m_target_pressure2{ 1e5 };
+  double m_control_gain{ 0.1 };
+};
+
+/**
+ * @brief Advanced pneumatic actuator simulation model
+ *
+ * Provides complete pneumatic system simulation using:
+ * - 10-state thermodynamic model with mass and energy conservation
+ * - Advanced LuGre friction model with dynamic bristle effects
+ * - Multiple high-accuracy ODE solvers with adaptive stepping
+ * - Configurable valve control strategies
+ * - Comprehensive result analysis and statistics
  */
 class PneumaticModel final
 {
 public:
   /**
-   * @brief Construct a new PneumaticModel object.
+   * @brief Construct model with default configuration
    */
   PneumaticModel();
 
   /**
-   * @brief Start the calculation/simulation in a separate thread.
+   * @brief Destructor ensures clean shutdown
    */
-  void startCalculation();
+  ~PneumaticModel();
 
   /**
-   * @brief Set the pneumatic parameters.
-   * @param parameters The pneumatic parameters to use.
+   * @brief Start simulation with current configuration
+   *
+   * Runs simulation in background thread. Use isCalculating() and
+   * hasResults() to monitor progress.
    */
-  void setParameters(const PneumaticParameters& parameters);
+  void startSimulation();
 
   /**
-   * @brief Get the current pneumatic parameters.
-   * @return The current pneumatic parameters.
+   * @brief Stop any running simulation
    */
-  [[nodiscard]] PneumaticParameters getParameters() const;
+  void stopSimulation();
 
   /**
-   * @brief Get the result of the last calculation.
-   * @return The calculation result (time and state trajectory).
+   * @brief Run simulation synchronously with current configuration
+   * @return Complete simulation result
+   * @throw std::runtime_error if simulation fails
    */
-  [[nodiscard]] core::util::SolveResult getCalculationResult() const;
+  [[nodiscard]] SimulationResult runSimulation();
 
   /**
-   * @brief Get statistics about the last calculation.
-   * @return Calculation statistics.
+   * @brief Set complete simulation configuration
+   * @param config New simulation parameters
    */
-  [[nodiscard]] CalculationStatistics getCalculationStatistics() const;
+  void setConfiguration(const SimulationConfig& config);
 
   /**
-   * @brief Get the current solver configuration.
-   * @return Solver configuration.
+   * @brief Get current simulation configuration
+   * @return Current configuration
    */
-  [[nodiscard]] core::util::SolverConfig getSolverConfig() const;
+  [[nodiscard]] const SimulationConfig& getConfiguration() const noexcept;
 
   /**
-   * @brief Set the solver configuration.
-   * @param solver_config The solver configuration to use.
+   * @brief Set initial conditions for simulation
+   * @param conditions Initial state
    */
-  void setSolverConfig(const core::util::SolverConfig& solver_config);
+  void setInitialConditions(const InitialConditions& conditions);
 
   /**
-   * @brief Set the initial state for the simulation.
-   * @param initial_state Initial state vector (e.g., position and velocity).
+   * @brief Get current initial conditions
+   * @return Initial conditions
    */
-  void setInitialState(const Eigen::VectorXd& initial_state);
+  [[nodiscard]] const InitialConditions& getInitialConditions() const noexcept;
 
   /**
-   * @brief Set the time span for the simulation.
-   * @param t_span Pair of (start time, end time).
+   * @brief Set simulation time span
+   * @param t_start Start time [s]
+   * @param t_end End time [s]
    */
-  void setTspan(const std::pair<double, double>& t_span);
+  void setTimeSpan(double t_start, double t_end);
 
   /**
-   * @brief Check if a calculation is currently running.
-   * @return True if calculating, false otherwise.
+   * @brief Get current time span
+   * @return Pair of (start_time, end_time)
    */
-  [[nodiscard]] bool isCalculating() const noexcept { return m_is_calculating; }
+  [[nodiscard]] std::pair<double, double> getTimeSpan() const noexcept;
 
   /**
-   * @brief Check if results are available from the last calculation.
-   * @return True if results are available, false otherwise.
+   * @brief Configure valve controller
+   * @param controller Shared pointer to valve controller
    */
-  [[nodiscard]] bool hasResults() const noexcept { return m_has_results; }
+  void setValveController(
+    std::shared_ptr<physics::IValveController> controller);
+
+  /**
+   * @brief Get results from last simulation
+   * @return Simulation results (empty if no valid results)
+   */
+  [[nodiscard]] SimulationResult getResults() const;
+
+  /**
+   * @brief Get statistics from last simulation
+   * @return Simulation statistics
+   */
+  [[nodiscard]] SimulationStatistics getStatistics() const;
+
+  /**
+   * @brief Check if simulation is currently running
+   * @return true if calculating, false otherwise
+   */
+  [[nodiscard]] bool isCalculating() const noexcept;
+
+  /**
+   * @brief Check if valid results are available
+   * @return true if results available, false otherwise
+   */
+  [[nodiscard]] bool hasResults() const noexcept;
+
+  /**
+   * @brief Get current solver information
+   * @return Human-readable solver description
+   */
+  [[nodiscard]] std::string getSolverInfo() const;
 
 private:
-  /**
-   * @brief The ODE function representing the pneumatic system dynamics.
-   * @param time Current time.
-   * @param state Current state vector.
-   * @return Time derivative of the state vector.
-   */
-  [[nodiscard]] Eigen::VectorXd pneumatic_ode(
-    double                 time,
-    const Eigen::VectorXd& state) const;
+  // Core physics components
+  std::unique_ptr<physics::PneumaticPhysics> m_physics;
+  std::unique_ptr<friction::LuGreFriction>   m_friction;
+  std::unique_ptr<stop::StopForce>           m_stop_force;
+  std::unique_ptr<solver::OdeSolverWrapper>  m_solver;
+  std::shared_ptr<physics::IValveController> m_valve_controller;
+
+  // Configuration
+  SimulationConfig          m_config{};
+  InitialConditions         m_initial_conditions{};
+  std::pair<double, double> m_time_span{ 0.0, 1.0 };
+
+  // Results and state
+  SimulationResult     m_result{};
+  SimulationStatistics m_statistics{};
+  std::atomic<bool>    m_is_calculating{ false };
+  std::atomic<bool>    m_has_results{ false };
+  std::atomic<bool>    m_stop_requested{ false };
+
+  // Thread safety
+  mutable std::mutex           m_result_mutex;
+  std::unique_ptr<std::thread> m_simulation_thread;
 
   /**
-   * @brief Calculate the friction force for a given velocity.
-   * @param velocity The velocity.
-   * @return The friction force.
+   * @brief Main simulation thread function
    */
-  double calculate_friction_force(double velocity) const;
+  void simulationThreadFunction();
 
   /**
-   * @brief Calculate the stop force for a given position and velocity.
-   * @param position The position.
-   * @param velocity The velocity.
-   * @return The stop force.
+   * @brief ODE system function for solver
+   * @param time Current time [s]
+   * @param state Current state vector
+   * @return State derivatives
    */
-  double calculate_stop_force(double position, double velocity) const;
+  [[nodiscard]] physics::StateVector odeSytem(
+    double                      time,
+    const physics::StateVector& state) const;
 
   /**
-   * @brief Calculate statistics for the last simulation.
+   * @brief Process raw solver results into structured format
+   * @param solver_result Raw solver output
+   */
+  void processSolverResults(const solver::SolveResult& solver_result);
+
+  /**
+   * @brief Calculate comprehensive statistics from results
    */
   void calculateStatistics();
 
-  PneumaticParameters       m_parameters{};
-  FrictionParameters        m_friction_parameters{};
-  StopForceParameters       m_stop_force_parameters{};
-  core::util::SolveResult   m_result{};
-  CalculationStatistics     m_statistics{};
-  core::util::SolverConfig  m_solver_config{};
-  Eigen::VectorXd           m_initial_state{ 0.0, 0.0 };
-  std::pair<double, double> m_t_span{ 0.0, 1.0 };
-  std::atomic<bool>         m_is_calculating{ false };
-  std::atomic<bool>         m_has_results{ false };
-  mutable std::mutex        m_result_mutex;
+  /**
+   * @brief Validate configuration before simulation
+   * @throw std::invalid_argument if configuration is invalid
+   */
+  void validateConfiguration() const;
 };
-}
+
+} // namespace mz::model

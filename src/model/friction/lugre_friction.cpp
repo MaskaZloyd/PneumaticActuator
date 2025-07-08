@@ -44,7 +44,7 @@ LuGreFriction::calculateForce(double velocity, double dt) noexcept
   // Clamp dt to reasonable bounds for numerical stability
   dt = std::clamp(dt, 1e-8, 0.1);
 
-  // Calculate bristle dynamics: dz/dt = v - σ₀|v|z/g(v)
+  // Calculate bristle dynamics
   const double bristle_derivative =
     calculateBristleDerivative(velocity, m_bristle_state);
 
@@ -57,7 +57,7 @@ LuGreFriction::calculateForce(double velocity, double dt) noexcept
   const double micro_viscous_force = m_params.sigma2 * velocity;
   const double viscous_force       = m_params.B * velocity;
 
-  // Total friction force: F = σ₀z + σ₁(dz/dt) + σ₂v + Bv
+  // Total friction force
   const double total_force =
     bristle_force + damping_force + micro_viscous_force + viscous_force;
 
@@ -102,8 +102,7 @@ LuGreFriction::setParameters(const LuGreParameters& params)
 double
 LuGreFriction::calculateSteadyStateForce(double velocity) const noexcept
 {
-  // In steady state: dz/dt = 0, so v = σ₀|v|z/g(v)
-  // Solving for z: z = v*g(v)/(σ₀|v|) = g(v)*sign(v)/σ₀
+  // Solving for z
 
   if (std::abs(velocity) < m_params.epsilon) {
     // At zero velocity, steady state friction can be anywhere in [-Fs, +Fs]
@@ -140,7 +139,6 @@ LuGreFriction::isSticking(double velocity_threshold) const noexcept
 double
 LuGreFriction::calculateStribeckFunction(double velocity) const noexcept
 {
-  // g(v) = Fc + (Fs - Fc) * exp(-|v|/(vs + ε))
   const double abs_velocity = std::abs(velocity);
   const double exp_term =
     std::exp(-abs_velocity / (m_params.vs + m_params.epsilon));
@@ -152,8 +150,6 @@ double
 LuGreFriction::calculateBristleDerivative(double velocity,
                                           double bristle_state) const noexcept
 {
-  // dz/dt = v - σ₀|v|z/g(v)
-
   const double abs_velocity = std::abs(velocity);
 
   // Handle near-zero velocity to avoid division by zero
@@ -239,4 +235,4 @@ operator!=(const LuGreParameters& lhs, const LuGreParameters& rhs) noexcept
   return !(lhs == rhs);
 }
 
-} // namespace mz::model::friction
+}
