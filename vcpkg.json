@@ -12,6 +12,12 @@
                 "glfw-binding"
             ]
         },
-        "implot"
+        "implot",
+        {
+            "name": "boost-odeint",
+            "version>=": "1.82.0"
+        },
+        "boost-system",
+        "boost-core"
     ]
 }
